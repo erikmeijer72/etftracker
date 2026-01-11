@@ -1,8 +1,11 @@
-const CACHE_NAME = 'etf-portfolio-v1';
+const CACHE_NAME = 'etf-portfolio-v2';
 // We cache the root, which Vercel serves as index.html
 const urlsToCache = [
   '/',
-  '/index.html'
+  '/index.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
