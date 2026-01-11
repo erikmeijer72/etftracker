@@ -7,16 +7,25 @@ import UpdatePricesModal from './components/UpdatePricesModal';
 import ETFRow from './components/ETFRow';
 
 const App: React.FC = () => {
-  // Initialize holdings state
+  // Initialize holdings state with error handling
   const [holdings, setHoldings] = useState<Holding[]>(() => {
-    const saved = localStorage.getItem('etf_portfolio');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('etf_portfolio');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error loading portfolio from storage:", e);
+      return [];
+    }
   });
 
   // Initialize manual total value state
   const [manualTotalValue, setManualTotalValue] = useState<number | null>(() => {
+    try {
       const saved = localStorage.getItem('etf_portfolio_manual_total');
       return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
   });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,16 +34,29 @@ const App: React.FC = () => {
 
   // Persist to local storage
   useEffect(() => {
-    localStorage.setItem('etf_portfolio', JSON.stringify(holdings));
+    try {
+      localStorage.setItem('etf_portfolio', JSON.stringify(holdings));
+    } catch (e) {
+      console.error("Error saving portfolio:", e);
+    }
   }, [holdings]);
 
   useEffect(() => {
-    if (manualTotalValue === null) {
-        localStorage.removeItem('etf_portfolio_manual_total');
-    } else {
-        localStorage.setItem('etf_portfolio_manual_total', JSON.stringify(manualTotalValue));
+    try {
+      if (manualTotalValue === null) {
+          localStorage.removeItem('etf_portfolio_manual_total');
+      } else {
+          localStorage.setItem('etf_portfolio_manual_total', JSON.stringify(manualTotalValue));
+      }
+    } catch (e) {
+      console.error("Error saving manual total:", e);
     }
   }, [manualTotalValue]);
+
+  // Robust ID generator that works in non-secure contexts (unlike crypto.randomUUID)
+  const generateId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+  };
 
   const saveHolding = (holdingData: Omit<Holding, 'id' | 'updatedAt'> | Holding) => {
     if ('id' in holdingData) {
@@ -44,7 +66,7 @@ const App: React.FC = () => {
         // Create new
         const newHolding: Holding = {
             ...holdingData,
-            id: crypto.randomUUID(),
+            id: generateId(),
             updatedAt: Date.now(),
         };
         setHoldings(prev => [...prev, newHolding]);
