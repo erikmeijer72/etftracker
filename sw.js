@@ -1,8 +1,8 @@
 const CACHE_NAME = 'etf-portfolio-v1';
+// We cache the root, which Vercel serves as index.html
 const urlsToCache = [
   '/',
-  '/index.html',
-  '/index.tsx'
+  '/index.html'
 ];
 
 self.addEventListener('install', (event) => {
@@ -24,14 +24,18 @@ self.addEventListener('fetch', (event) => {
         }
         return fetch(event.request).then(
           (response) => {
+            // Cache valid responses for other assets
             if (!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
+            // Only cache if scheme is http/https (skip chrome-extension:// etc)
+            if (event.request.url.startsWith('http')) {
+                const responseToCache = response.clone();
+                caches.open(CACHE_NAME)
+                  .then((cache) => {
+                    cache.put(event.request, responseToCache);
+                  });
+            }
             return response;
           }
         );
