@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, BarChart3, LayoutDashboard, RefreshCw } from 'lucide-react';
-import { Holding, PortfolioSummary } from './types';
+import { Holding, PortfolioSummary, HistoryEntry } from './types';
 import SummaryCards from './components/SummaryCards';
 import AddHoldingModal from './components/AddHoldingModal';
 import UpdatePricesModal from './components/UpdatePricesModal';
@@ -15,6 +15,16 @@ const App: React.FC = () => {
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       console.error("Error loading portfolio from storage:", e);
+      return [];
+    }
+  });
+
+  // Initialize history state
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('etf_portfolio_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
       return [];
     }
   });
@@ -41,6 +51,14 @@ const App: React.FC = () => {
       console.error("Error saving portfolio:", e);
     }
   }, [holdings]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('etf_portfolio_history', JSON.stringify(history));
+    } catch (e) {
+      console.error("Error saving history:", e);
+    }
+  }, [history]);
 
   useEffect(() => {
     try {
@@ -129,6 +147,43 @@ const App: React.FC = () => {
     };
   }, [holdings, manualTotalValue]);
 
+  // Track History Effect
+  useEffect(() => {
+    if (summary.currentValue === 0 && summary.totalInvested === 0) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    setHistory(prev => {
+      const lastEntry = prev[prev.length - 1];
+      
+      // If we already have an entry for today, update it
+      if (lastEntry && lastEntry.date === today) {
+         // Optimization: Only update if values changed significantly (prevent loops)
+         if (Math.abs(lastEntry.totalValue - summary.currentValue) < 0.01 && 
+             Math.abs(lastEntry.totalInvested - summary.totalInvested) < 0.01) {
+             return prev;
+         }
+         
+         const updated = [...prev];
+         updated[updated.length - 1] = {
+             date: today,
+             timestamp: Date.now(),
+             totalValue: summary.currentValue,
+             totalInvested: summary.totalInvested
+         };
+         return updated;
+      } 
+      
+      // If no entry for today, add it
+      return [...prev, {
+           date: today,
+           timestamp: Date.now(),
+           totalValue: summary.currentValue,
+           totalInvested: summary.totalInvested
+      }];
+    });
+  }, [summary]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       {/* Navbar - Reduced height */}
@@ -209,7 +264,7 @@ const App: React.FC = () => {
               ))}
               
               {/* Graph at the bottom */}
-              <PortfolioChart holdings={holdings} />
+              <PortfolioChart history={history} />
             </>
           )}
         </div>

@@ -19,3 +19,10 @@ export interface PortfolioSummary {
   percentageResult: number;
   isManualTotal: boolean;
 }
+
+export interface HistoryEntry {
+  date: string; // YYYY-MM-DD
+  timestamp: number;
+  totalValue: number;
+  totalInvested: number;
+}
