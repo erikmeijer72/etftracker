@@ -5,6 +5,7 @@ import SummaryCards from './components/SummaryCards';
 import AddHoldingModal from './components/AddHoldingModal';
 import UpdatePricesModal from './components/UpdatePricesModal';
 import ETFRow from './components/ETFRow';
+import PortfolioChart from './components/PortfolioChart';
 
 const App: React.FC = () => {
   // Initialize holdings state with error handling
@@ -197,14 +198,19 @@ const App: React.FC = () => {
               </button>
             </div>
           ) : (
-            holdings.map(holding => (
-              <ETFRow 
-                key={holding.id} 
-                holding={holding} 
-                onEdit={handleEditHolding}
-                onDelete={deleteHolding}
-              />
-            ))
+            <>
+              {holdings.map(holding => (
+                <ETFRow 
+                  key={holding.id} 
+                  holding={holding} 
+                  onEdit={handleEditHolding}
+                  onDelete={deleteHolding}
+                />
+              ))}
+              
+              {/* Graph at the bottom */}
+              <PortfolioChart holdings={holdings} />
+            </>
           )}
         </div>
       </main>

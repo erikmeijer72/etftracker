@@ -1,4 +1,4 @@
-const CACHE_NAME = 'etf-portfolio-v2';
+const CACHE_NAME = 'etf-portfolio-v4';
 // We cache the root, which Vercel serves as index.html
 const urlsToCache = [
   '/',
