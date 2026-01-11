@@ -1,0 +1,16 @@
+{
+  "short_name": "ETF Port",
+  "name": "Mijn ETF Portfolio",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3310/3310653.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ffffff",
+  "background_color": "#f1f5f9",
+  "orientation": "portrait"
+}
