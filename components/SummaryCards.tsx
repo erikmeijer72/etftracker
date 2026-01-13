@@ -1,44 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { PortfolioSummary } from '../types';
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, Edit2, RotateCcw } from 'lucide-react';
+import React, { useState } from 'react';
+import { PortfolioSummary, Holding } from '../types';
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, X, Calculator } from 'lucide-react';
 
 interface Props {
   summary: PortfolioSummary;
-  onUpdateManualTotal: (value: number | null) => void;
+  holdings: Holding[];
 }
 
-const SummaryCards: React.FC<Props> = ({ summary, onUpdateManualTotal }) => {
+const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
   const isProfit = summary.totalResult >= 0;
-  const [isEditingTotal, setIsEditingTotal] = useState(false);
-  const [manualInput, setManualInput] = useState('');
-
-  useEffect(() => {
-    if (summary.isManualTotal) {
-      setManualInput(summary.currentValue.toString());
-    } else {
-        setManualInput('');
-    }
-  }, [summary.isManualTotal, summary.currentValue]);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const formatEuro = (val: number) => 
     new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
     
   const formatEuroPrecise = (val: number) => 
     new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(val);
-
-  const handleSaveManual = () => {
-    const val = parseFloat(manualInput);
-    if (!isNaN(val)) {
-        onUpdateManualTotal(val);
-    }
-    setIsEditingTotal(false);
-  };
-
-  const handleResetManual = () => {
-    onUpdateManualTotal(null);
-    setManualInput('');
-    setIsEditingTotal(false);
-  };
 
   // Common card styles
   const cardClass = "bg-white p-3 sm:p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-full";
@@ -47,107 +24,124 @@ const SummaryCards: React.FC<Props> = ({ summary, onUpdateManualTotal }) => {
   const valueClass = "text-lg sm:text-2xl font-bold text-slate-900 leading-tight";
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-8">
-      {/* Current Value (Editable) */}
-      <div className={`${cardClass} relative group col-span-2 sm:col-span-1`}>
-        <div className="flex items-center justify-between mb-1 sm:mb-2">
-          <h3 className={labelClass}>
-             {summary.isManualTotal ? 'Totaal (Handmatig)' : 'Waarde'}
-          </h3>
-          <div className={`${iconBgClass} bg-blue-50`}>
-            <Wallet className="w-4 h-4 sm:w-6 sm:h-6 text-[#0099CC]" />
+    <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-8">
+        {/* Current Value (Clickable for Breakdown) */}
+        <div className={`${cardClass} relative group`}>
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <h3 className={labelClass}>Totale Waarde</h3>
+            <button 
+                onClick={() => setShowBreakdown(true)}
+                className={`${iconBgClass} bg-blue-50 hover:bg-blue-100 transition cursor-pointer`}
+                title="Bekijk opbouw"
+            >
+              <Wallet className="w-4 h-4 sm:w-6 sm:h-6 text-[#0099CC]" />
+            </button>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+                <p className={valueClass}>{formatEuroPrecise(summary.currentValue)}</p>
+            </div>
           </div>
         </div>
 
-        {isEditingTotal ? (
-            <div className="flex flex-col gap-2">
-                <input 
-                    type="number" 
-                    value={manualInput}
-                    onChange={(e) => setManualInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-slate-900 focus:ring-2 focus:ring-[#0099CC] outline-none text-base font-bold"
-                    placeholder="Totaal..."
-                    autoFocus
-                />
-                <div className="flex gap-1">
-                    <button onClick={handleSaveManual} className="flex-1 bg-[#0099CC] text-white text-[10px] py-1 rounded">
-                        Ok
-                    </button>
-                     <button onClick={handleResetManual} className="flex-1 bg-slate-200 text-slate-600 text-[10px] py-1 rounded">
-                        Reset
-                    </button>
-                </div>
+        {/* Invested */}
+        <div className={cardClass}>
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <h3 className={labelClass}>Inleg</h3>
+            <div className={`${iconBgClass} bg-indigo-50`}>
+              <PiggyBank className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-500" />
             </div>
-        ) : (
-            <div>
-                <div className="flex items-center gap-2">
-                    <p className={valueClass}>{formatEuroPrecise(summary.currentValue)}</p>
-                    <button 
-                        onClick={() => setIsEditingTotal(true)}
-                        className="p-1 rounded bg-slate-100 text-slate-500 hover:text-slate-900 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
-                    >
-                        <Edit2 className="w-3 h-3" />
-                    </button>
-                </div>
-                {summary.isManualTotal ? (
-                    <div className="mt-1 text-[10px] text-slate-400 flex items-center justify-between">
-                        <span>Som: {formatEuro(summary.calculatedValue)}</span>
+          </div>
+          <div>
+              <p className={valueClass}>{formatEuro(summary.totalInvested)}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Kosten: {formatEuro(summary.totalFees)}</p>
+          </div>
+        </div>
+
+        {/* Result Absolute */}
+        <div className={cardClass}>
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <h3 className={labelClass}>Resultaat</h3>
+            <div className={`${iconBgClass} ${isProfit ? 'bg-emerald-50' : 'bg-red-50'}`}>
+              {isProfit ? (
+                <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-600" />
+              ) : (
+                <TrendingDown className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
+              )}
+            </div>
+          </div>
+          <p className={`text-lg sm:text-2xl font-bold ${isProfit ? 'text-emerald-600' : 'text-red-600'}`}>
+            {isProfit ? '+' : ''}{formatEuro(summary.totalResult)}
+          </p>
+        </div>
+
+        {/* Result Percentage */}
+        <div className={cardClass}>
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <h3 className={labelClass}>Rendement</h3>
+            <div className={`${iconBgClass} ${isProfit ? 'bg-emerald-50' : 'bg-red-50'}`}>
+              {isProfit ? (
+                <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-600" />
+              ) : (
+                <TrendingDown className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
+              )}
+            </div>
+          </div>
+          <p className={`text-lg sm:text-2xl font-bold ${isProfit ? 'text-emerald-600' : 'text-red-600'}`}>
+            {isProfit ? '+' : ''}{summary.percentageResult.toFixed(1)}%
+          </p>
+        </div>
+      </div>
+
+      {/* Breakdown Modal */}
+      {showBreakdown && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm border border-slate-200 shadow-2xl flex flex-col max-h-[80vh] animate-in fade-in zoom-in duration-200">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-blue-50 p-1.5 rounded-lg">
+                            <Calculator className="w-4 h-4 text-[#0099CC]" />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-900">Opbouw Waarde</h2>
                     </div>
-                ) : (
-                   <p className="text-[10px] text-slate-400 mt-0.5">Som van posities</p>
-                )}
+                    <button onClick={() => setShowBreakdown(false)} className="text-slate-400 hover:text-slate-800 transition">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {holdings.length === 0 ? (
+                        <p className="text-center text-slate-400 text-sm py-4">Geen posities om te tonen.</p>
+                    ) : (
+                        holdings.map(h => {
+                            const val = h.quantity * h.currentPrice;
+                            return (
+                                <div key={h.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="min-w-0 flex-1 pr-2">
+                                        <div className="font-bold text-slate-900 truncate text-sm">{h.ticker}</div>
+                                        <div className="text-xs text-slate-500">
+                                            {h.quantity} stuks × {formatEuro(h.currentPrice)}
+                                        </div>
+                                    </div>
+                                    <div className="text-right font-bold text-slate-900 text-sm whitespace-nowrap">
+                                        {formatEuroPrecise(val)}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-200 rounded-b-2xl flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-600">Totaal</span>
+                    <span className="text-lg font-bold text-[#0099CC]">{formatEuroPrecise(summary.currentValue)}</span>
+                </div>
             </div>
-        )}
-      </div>
-
-      {/* Invested */}
-      <div className={cardClass}>
-        <div className="flex items-center justify-between mb-1 sm:mb-2">
-          <h3 className={labelClass}>Inleg</h3>
-          <div className={`${iconBgClass} bg-indigo-50`}>
-            <PiggyBank className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-500" />
-          </div>
         </div>
-        <div>
-            <p className={valueClass}>{formatEuro(summary.totalInvested)}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Kosten: {formatEuro(summary.totalFees)}</p>
-        </div>
-      </div>
-
-      {/* Result Absolute */}
-      <div className={cardClass}>
-        <div className="flex items-center justify-between mb-1 sm:mb-2">
-          <h3 className={labelClass}>Resultaat</h3>
-          <div className={`${iconBgClass} ${isProfit ? 'bg-emerald-50' : 'bg-red-50'}`}>
-            {isProfit ? (
-              <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-600" />
-            ) : (
-              <TrendingDown className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
-            )}
-          </div>
-        </div>
-        <p className={`text-lg sm:text-2xl font-bold ${isProfit ? 'text-emerald-600' : 'text-red-600'}`}>
-          {isProfit ? '+' : ''}{formatEuro(summary.totalResult)}
-        </p>
-      </div>
-
-      {/* Result Percentage */}
-      <div className={cardClass}>
-        <div className="flex items-center justify-between mb-1 sm:mb-2">
-          <h3 className={labelClass}>Rendement</h3>
-          <div className={`${iconBgClass} ${isProfit ? 'bg-emerald-50' : 'bg-red-50'}`}>
-             {isProfit ? (
-              <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-600" />
-            ) : (
-              <TrendingDown className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
-            )}
-          </div>
-        </div>
-        <p className={`text-lg sm:text-2xl font-bold ${isProfit ? 'text-emerald-600' : 'text-red-600'}`}>
-          {isProfit ? '+' : ''}{summary.percentageResult.toFixed(1)}%
-        </p>
-      </div>
-    </div>
+      )}
+    </>
   );
 };
 

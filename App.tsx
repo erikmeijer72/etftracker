@@ -1,25 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, BarChart3, LayoutDashboard, RefreshCw } from 'lucide-react';
+import { Plus, BarChart3, RefreshCw, History as HistoryIcon, Receipt, TrendingUp, Download } from 'lucide-react';
 import { Holding, PortfolioSummary, HistoryEntry } from './types';
 import SummaryCards from './components/SummaryCards';
 import AddHoldingModal from './components/AddHoldingModal';
 import UpdatePricesModal from './components/UpdatePricesModal';
+import HistoryModal from './components/HistoryModal';
+import TransactionsModal from './components/TransactionsModal';
+import PriceHistoryModal from './components/PriceHistoryModal';
 import ETFRow from './components/ETFRow';
 import PortfolioChart from './components/PortfolioChart';
+import * as XLSX from 'xlsx';
 
 const App: React.FC = () => {
-  // Initialize holdings state with error handling
   const [holdings, setHoldings] = useState<Holding[]>(() => {
     try {
       const saved = localStorage.getItem('etf_portfolio');
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
-      console.error("Error loading portfolio from storage:", e);
+      console.error("Error loading portfolio:", e);
       return [];
     }
   });
 
-  // Initialize history state
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const saved = localStorage.getItem('etf_portfolio_history');
@@ -28,261 +30,456 @@ const App: React.FC = () => {
       return [];
     }
   });
-
-  // Initialize manual total value state
-  const [manualTotalValue, setManualTotalValue] = useState<number | null>(() => {
-    try {
-      const saved = localStorage.getItem('etf_portfolio_manual_total');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPricesModalOpen, setIsPricesModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
+  const [isPriceHistoryModalOpen, setIsPriceHistoryModalOpen] = useState(false);
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
 
-  // Persist to local storage
   useEffect(() => {
-    try {
-      localStorage.setItem('etf_portfolio', JSON.stringify(holdings));
-    } catch (e) {
-      console.error("Error saving portfolio:", e);
-    }
+    localStorage.setItem('etf_portfolio', JSON.stringify(holdings));
   }, [holdings]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('etf_portfolio_history', JSON.stringify(history));
-    } catch (e) {
-      console.error("Error saving history:", e);
-    }
+    localStorage.setItem('etf_portfolio_history', JSON.stringify(history));
   }, [history]);
 
-  useEffect(() => {
-    try {
-      if (manualTotalValue === null) {
-          localStorage.removeItem('etf_portfolio_manual_total');
-      } else {
-          localStorage.setItem('etf_portfolio_manual_total', JSON.stringify(manualTotalValue));
-      }
-    } catch (e) {
-      console.error("Error saving manual total:", e);
-    }
-  }, [manualTotalValue]);
+  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 
-  // Robust ID generator that works in non-secure contexts
-  const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+  const calculateTotalInvested = (currentHoldings: Holding[]) => {
+    return currentHoldings.reduce((sum, h) => sum + (h.quantity * h.averagePrice) + h.transactionFees, 0);
   };
 
-  const saveHolding = (holdingData: Omit<Holding, 'id' | 'updatedAt'> | Holding) => {
+  const calculateBreakdownAndTotal = (currentHoldings: Holding[]) => {
+    const breakdown: { [ticker: string]: number } = {};
+    const prices: { [ticker: string]: number } = {};
+    let totalValue = 0;
+
+    currentHoldings.forEach(h => {
+        const val = h.quantity * h.currentPrice;
+        const key = h.ticker;
+        breakdown[key] = (breakdown[key] || 0) + val;
+        prices[key] = h.currentPrice;
+        totalValue += val;
+    });
+
+    return { totalValue, breakdown, prices };
+  };
+
+  const saveHolding = (holdingData: Omit<Holding, 'id' | 'updatedAt'> | Holding, purchaseDate: string) => {
+    let newHoldings: Holding[];
+    
     if ('id' in holdingData) {
-        // Update existing
-        setHoldings(prev => prev.map(h => h.id === holdingData.id ? holdingData as Holding : h));
+        newHoldings = holdings.map(h => h.id === holdingData.id ? { ...holdingData, purchaseDate } as Holding : h);
     } else {
-        // Create new
         const newHolding: Holding = {
             ...holdingData,
             id: generateId(),
+            purchaseDate,
             updatedAt: Date.now(),
         };
-        setHoldings(prev => [...prev, newHolding]);
+        newHoldings = [...holdings, newHolding];
     }
+    
+    setHoldings(newHoldings);
     setEditingHolding(null);
+
+    const today = new Date().toISOString().split('T')[0];
+    const { totalValue: currentTotalValue, breakdown: currentBreakdown, prices: currentPrices } = calculateBreakdownAndTotal(newHoldings);
+    const currentTotalInvested = calculateTotalInvested(newHoldings);
+
+    setHistory(prev => {
+        const filtered = prev.filter(p => p.date !== today);
+        const todayEntry: HistoryEntry = {
+            date: today,
+            timestamp: new Date(today).getTime(),
+            totalValue: currentTotalValue,
+            totalInvested: currentTotalInvested,
+            breakdown: currentBreakdown,
+            prices: currentPrices
+        };
+        
+        let newHistory = [...filtered, todayEntry];
+
+        if (purchaseDate !== today) {
+             const exists = newHistory.some(p => p.date === purchaseDate);
+             if (!exists) {
+                 const breakdownAtPurchase: { [ticker: string]: number } = {};
+                 const pricesAtPurchase: { [ticker: string]: number } = {};
+                 let valAtPurchase = 0;
+                 
+                 const otherHoldings = 'id' in holdingData 
+                    ? holdings.filter(h => h.id !== holdingData.id) 
+                    : holdings;
+
+                 otherHoldings.forEach(h => {
+                    const val = h.quantity * h.currentPrice;
+                    const key = h.ticker;
+                    breakdownAtPurchase[key] = (breakdownAtPurchase[key] || 0) + val;
+                    pricesAtPurchase[key] = h.currentPrice;
+                    valAtPurchase += val;
+                 });
+                 
+                 const newItemVal = holdingData.quantity * holdingData.averagePrice;
+                 const key = holdingData.ticker;
+                 breakdownAtPurchase[key] = (breakdownAtPurchase[key] || 0) + newItemVal;
+                 pricesAtPurchase[key] = holdingData.averagePrice;
+                 valAtPurchase += newItemVal;
+                 
+                 const estimatedInvested = calculateTotalInvested(otherHoldings) + newItemVal + holdingData.transactionFees;
+
+                 newHistory.push({
+                     date: purchaseDate,
+                     timestamp: new Date(purchaseDate).getTime(),
+                     totalValue: valAtPurchase,
+                     totalInvested: estimatedInvested,
+                     breakdown: breakdownAtPurchase,
+                     prices: pricesAtPurchase
+                 });
+             }
+        }
+
+        return newHistory.sort((a, b) => a.timestamp - b.timestamp);
+    });
   };
 
-  const updatePrices = (updates: { id: string; price: number }[]) => {
-    setHoldings(prev => prev.map(holding => {
-      const update = updates.find(u => u.id === holding.id);
-      if (update) {
-        return { ...holding, currentPrice: update.price, updatedAt: Date.now() };
-      }
-      return holding;
-    }));
-  };
+  const updateHoldingPrice = (id: string, newPrice: number, date: string) => {
+    const targetHolding = holdings.find(h => h.id === id);
+    if (!targetHolding) return;
+    const targetTicker = targetHolding.ticker;
 
-  const handleEditHolding = (holding: Holding) => {
-      setEditingHolding(holding);
-      setIsModalOpen(true);
-  };
+    const calculateEntryValues = (pricesMap: {[key:string]: number}, dateStr: string): HistoryEntry => {
+         let totalValue = 0;
+         let totalInvested = 0;
+         const breakdown: {[key:string]: number} = {};
+         
+         holdings.forEach(h => {
+             const p = pricesMap[h.ticker] ?? h.currentPrice;
+             pricesMap[h.ticker] = p;
+             
+             const val = h.quantity * p;
+             breakdown[h.ticker] = (breakdown[h.ticker] || 0) + val;
+             totalValue += val;
+             totalInvested += (h.quantity * h.averagePrice) + h.transactionFees;
+         });
 
-  const handleCloseModal = () => {
-      setIsModalOpen(false);
-      setEditingHolding(null);
+         return {
+             date: dateStr,
+             timestamp: new Date(dateStr).getTime(),
+             totalValue,
+             totalInvested,
+             breakdown,
+             prices: pricesMap
+         };
+    };
+
+    const sortedHistory = [...history].sort((a, b) => a.timestamp - b.timestamp);
+    let newHistory = [...sortedHistory];
+    const timestamp = new Date(date).getTime();
+
+    let matchValue: number | undefined;
+    const existingIndex = newHistory.findIndex(h => h.date === date);
+    
+    if (existingIndex !== -1) {
+        matchValue = newHistory[existingIndex].prices?.[targetTicker];
+    } else {
+        const prevEntry = newHistory.filter(h => h.timestamp < timestamp).pop();
+        matchValue = prevEntry?.prices?.[targetTicker];
+    }
+
+    let targetEntryIndex = existingIndex;
+    
+    if (targetEntryIndex === -1) {
+        const prevEntry = newHistory.filter(h => h.timestamp < timestamp).pop();
+        const basePrices = prevEntry ? { ...prevEntry.prices } : {};
+        
+        holdings.forEach(h => {
+             if (basePrices[h.ticker] === undefined) basePrices[h.ticker] = h.currentPrice;
+        });
+        basePrices[targetTicker] = newPrice;
+        
+        const newEntry = calculateEntryValues(basePrices, date);
+        newHistory.push(newEntry);
+        newHistory.sort((a, b) => a.timestamp - b.timestamp);
+        targetEntryIndex = newHistory.findIndex(h => h.date === date);
+    } else {
+        const basePrices = { ...(newHistory[targetEntryIndex].prices || {}) };
+        holdings.forEach(h => {
+             if (basePrices[h.ticker] === undefined) basePrices[h.ticker] = h.currentPrice;
+        });
+        basePrices[targetTicker] = newPrice;
+        newHistory[targetEntryIndex] = calculateEntryValues(basePrices, date);
+    }
+
+    for (let i = targetEntryIndex + 1; i < newHistory.length; i++) {
+        const entry = newHistory[i];
+        const oldPrice = entry.prices?.[targetTicker];
+        
+        const shouldUpdate = 
+            (matchValue !== undefined && oldPrice !== undefined && Math.abs(oldPrice - matchValue) < 0.001) ||
+            (matchValue === undefined && (oldPrice === undefined || oldPrice === 0));
+
+        if (shouldUpdate) {
+            const newPrices = { ...(entry.prices || {}) };
+            holdings.forEach(h => {
+                if (newPrices[h.ticker] === undefined) newPrices[h.ticker] = h.currentPrice;
+            });
+            newPrices[targetTicker] = newPrice;
+            newHistory[i] = calculateEntryValues(newPrices, entry.date);
+        } else {
+            break; 
+        }
+    }
+
+    setHistory(newHistory);
+
+    const lastEntry = newHistory[newHistory.length - 1];
+    if (lastEntry && lastEntry.prices && lastEntry.prices[targetTicker] !== undefined) {
+        setHoldings(prev => prev.map(h => {
+            if (h.ticker === targetTicker) {
+                return { ...h, currentPrice: lastEntry.prices![targetTicker], updatedAt: Date.now() };
+            }
+            return h;
+        }));
+    }
   };
 
   const deleteHolding = (id: string) => {
     if(window.confirm("Weet je zeker dat je deze positie wilt verwijderen?")) {
-      setHoldings(prev => prev.filter(h => h.id !== id));
+      setHoldings(prev => {
+          const newHoldings = prev.filter(h => h.id !== id);
+          const today = new Date().toISOString().split('T')[0];
+          const { totalValue, breakdown, prices } = calculateBreakdownAndTotal(newHoldings);
+          const newInv = calculateTotalInvested(newHoldings);
+          
+          setHistory(hist => {
+              const filtered = hist.filter(p => p.date !== today);
+              return [...filtered, {
+                  date: today,
+                  timestamp: new Date(today).getTime(),
+                  totalValue,
+                  totalInvested: newInv,
+                  breakdown,
+                  prices
+              }].sort((a, b) => a.timestamp - b.timestamp);
+          });
+
+          return newHoldings;
+      });
     }
   };
 
-  // Calculate summary statistics
-  const summary: PortfolioSummary = useMemo(() => {
-    let totalInvested = 0;
-    let calculatedCurrentValue = 0;
-    let totalFees = 0;
-
-    holdings.forEach(h => {
-      totalInvested += (h.quantity * h.averagePrice) + h.transactionFees;
-      calculatedCurrentValue += h.quantity * h.currentPrice;
-      totalFees += h.transactionFees;
+  const addHistoryPoint = (date: string, value: number) => {
+    setHistory(prev => {
+      const filtered = prev.filter(p => p.date !== date);
+      const newPoint: HistoryEntry = {
+        date,
+        timestamp: new Date(date).getTime(),
+        totalValue: value,
+        totalInvested: summary.totalInvested
+      };
+      return [...filtered, newPoint].sort((a, b) => a.timestamp - b.timestamp);
     });
+  };
 
-    const isManualTotal = manualTotalValue !== null;
-    const effectiveCurrentValue = isManualTotal ? manualTotalValue : calculatedCurrentValue;
-    const totalResult = effectiveCurrentValue - totalInvested;
+  const deleteHistoryPoint = (date: string) => {
+    setHistory(prev => prev.filter(p => p.date !== date));
+  };
+
+  const handleExport = () => {
+    const wb = XLSX.utils.book_new();
+
+    const sortedHoldings = [...holdings].sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+    const transactionsData = sortedHoldings.map(h => ({
+      Datum: h.purchaseDate,
+      Ticker: h.ticker,
+      Naam: h.name,
+      Aantal: h.quantity,
+      'Aankoopprijs (€)': h.averagePrice,
+      'Huidige Koers (€)': h.currentPrice,
+      'Kosten (€)': h.transactionFees,
+      'Totaal Geïnvesteerd (€)': (h.quantity * h.averagePrice) + h.transactionFees,
+      'Huidige Waarde (€)': h.quantity * h.currentPrice
+    }));
+    const wsTransactions = XLSX.utils.json_to_sheet(transactionsData);
+    XLSX.utils.book_append_sheet(wb, wsTransactions, "Transacties");
+
+    const allTickers = Array.from(new Set(holdings.map(h => h.ticker))).sort();
+    const sortedHistory = [...history].sort((a, b) => b.timestamp - a.timestamp);
+    
+    const historyData = sortedHistory.map(entry => {
+      const row: any = {
+        Datum: entry.date,
+        'Portfolio Waarde (€)': entry.totalValue,
+        'Portfolio Inleg (€)': entry.totalInvested
+      };
+      
+      allTickers.forEach(ticker => {
+        const price = entry.prices ? entry.prices[ticker] : undefined;
+        row[`${ticker} Koers`] = price !== undefined ? price : '';
+      });
+      
+      return row;
+    });
+    const wsHistory = XLSX.utils.json_to_sheet(historyData);
+    XLSX.utils.book_append_sheet(wb, wsHistory, "Koershistorie");
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `ETF_Portfolio_Export_${dateStr}.xlsx`);
+  };
+
+  const summary: PortfolioSummary = useMemo(() => {
+    const totalInvested = calculateTotalInvested(holdings);
+    const { totalValue } = calculateBreakdownAndTotal(holdings);
+    const totalFees = holdings.reduce((sum, h) => sum + h.transactionFees, 0);
+
+    const totalResult = totalValue - totalInvested;
     const percentageResult = totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0;
 
     return {
       totalInvested,
-      currentValue: effectiveCurrentValue,
-      calculatedValue: calculatedCurrentValue,
+      currentValue: totalValue,
       totalFees,
       totalResult,
-      percentageResult,
-      isManualTotal
+      percentageResult
     };
-  }, [holdings, manualTotalValue]);
-
-  // Track History Effect
-  useEffect(() => {
-    if (summary.currentValue === 0 && summary.totalInvested === 0) return;
-
-    const today = new Date().toISOString().split('T')[0];
-    
-    setHistory(prev => {
-      const lastEntry = prev[prev.length - 1];
-      
-      // If we already have an entry for today, update it
-      if (lastEntry && lastEntry.date === today) {
-         // Optimization: Only update if values changed significantly (prevent loops)
-         if (Math.abs(lastEntry.totalValue - summary.currentValue) < 0.01 && 
-             Math.abs(lastEntry.totalInvested - summary.totalInvested) < 0.01) {
-             return prev;
-         }
-         
-         const updated = [...prev];
-         updated[updated.length - 1] = {
-             date: today,
-             timestamp: Date.now(),
-             totalValue: summary.currentValue,
-             totalInvested: summary.totalInvested
-         };
-         return updated;
-      } 
-      
-      // If no entry for today, add it
-      return [...prev, {
-           date: today,
-           timestamp: Date.now(),
-           totalValue: summary.currentValue,
-           totalInvested: summary.totalInvested
-      }];
-    });
-  }, [summary]);
+  }, [holdings]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* Navbar - Reduced height */}
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="bg-[#0099CC] p-1.5 sm:p-2 rounded-lg">
+          <div className="grid grid-cols-3 items-center h-14 sm:h-16">
+            {/* Logo on the far left */}
+            <div className="flex justify-start">
+              <div className="bg-[#0099CC] p-1.5 sm:p-2 rounded-lg shrink-0">
                 <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">ETF Portfolio</h1>
             </div>
-            <div className="text-xs text-slate-500 font-mono hidden sm:block bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-              {holdings.length} Posities
+
+            {/* Title centered in the middle */}
+            <div className="flex justify-center">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap">ETF Portfolio</h1>
+            </div>
+
+            {/* Download Button on the far right */}
+            <div className="flex justify-end">
+              <button 
+                onClick={handleExport}
+                className="p-2 text-slate-500 hover:text-[#0099CC] hover:bg-slate-50 rounded-lg transition"
+                title="Exporteer naar Excel"
+              >
+                <Download className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Main Content - Reduced padding */}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        
-        {/* Welcome / Stats */}
-        <div className="mb-4 sm:mb-6">
-          <SummaryCards 
-            summary={summary} 
-            onUpdateManualTotal={setManualTotalValue} 
-          />
-        </div>
+        <SummaryCards summary={summary} holdings={holdings} />
 
-        {/* Actions Bar */}
-        <div className="flex items-center justify-between mb-3 sm:mb-6 gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-6 gap-3">
           <h2 className="text-lg sm:text-xl font-bold text-slate-800">Mijn ETF's</h2>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+             <button 
+                onClick={() => setIsTransactionsModalOpen(true)}
+                className="flex-1 sm:flex-none bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
+                title="Bekijk transacties"
+            >
+                <Receipt className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
+                <span className="hidden sm:inline">Transacties</span>
+            </button>
+            
+            <button 
+                onClick={() => setIsPriceHistoryModalOpen(true)}
+                className="flex-1 sm:flex-none bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
+                title="Bekijk koersen"
+            >
+                <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
+                <span className="hidden sm:inline">Koersen</span>
+            </button>
+
             <button 
                 onClick={() => setIsPricesModalOpen(true)}
-                className="bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 sm:px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
+                className="flex-1 sm:flex-none bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
             >
                 <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
-                <span className="hidden sm:inline">Koersen Updaten</span>
-                <span className="sm:hidden">Updaten</span>
+                <span className="hidden sm:inline">Update</span>
             </button>
             <button 
                 onClick={() => setIsModalOpen(true)}
-                className="bg-[#0099CC] hover:bg-[#0088b6] text-white px-3 py-2 sm:px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 text-sm"
+                className="flex-1 sm:flex-none bg-[#0099CC] hover:bg-[#0088b6] text-white px-3 py-2 sm:px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 text-sm"
             >
                 <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">Nieuwe ETF</span>
-                <span className="sm:hidden">Toevoegen</span>
+                <span className="hidden sm:inline">Nieuw</span>
             </button>
           </div>
         </div>
 
-        {/* List of Holdings */}
         <div className="space-y-2 sm:space-y-4">
           {holdings.length === 0 ? (
             <div className="text-center py-12 sm:py-20 bg-white rounded-xl border border-slate-300 border-dashed">
-              <div className="bg-slate-50 inline-block p-3 sm:p-4 rounded-full mb-3 sm:mb-4 border border-slate-100">
-                <BarChart3 className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
-              </div>
+              <BarChart3 className="w-10 h-10 text-slate-400 mx-auto mb-4" />
               <h3 className="text-base sm:text-lg font-medium text-slate-700">Nog geen ETFs</h3>
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="mt-4 text-[#0099CC] hover:text-[#0088b6] font-medium hover:underline text-sm sm:text-base"
-              >
+              <button onClick={() => setIsModalOpen(true)} className="mt-4 text-[#0099CC] font-medium">
                 + Voeg je eerste ETF toe
               </button>
             </div>
           ) : (
             <>
               {holdings.map(holding => (
-                <ETFRow 
-                  key={holding.id} 
-                  holding={holding} 
-                  onEdit={handleEditHolding}
-                  onDelete={deleteHolding}
-                />
+                <ETFRow key={holding.id} holding={holding} onEdit={(h) => { setEditingHolding(h); setIsModalOpen(true); }} onDelete={deleteHolding} />
               ))}
               
-              {/* Graph at the bottom */}
-              <PortfolioChart history={history} />
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-bold text-slate-800">Waardeontwikkeling</h3>
+                  <button 
+                    onClick={() => setIsHistoryModalOpen(true)}
+                    className="text-xs font-medium text-[#0099CC] hover:underline flex items-center gap-1"
+                  >
+                    <HistoryIcon className="w-3.5 h-3.5" />
+                    Historie beheren
+                  </button>
+                </div>
+                <PortfolioChart history={history} holdings={holdings} />
+              </div>
             </>
           )}
         </div>
       </main>
 
-      {/* Modals */}
-      <AddHoldingModal 
-        isOpen={isModalOpen} 
-        onClose={handleCloseModal} 
-        onSave={saveHolding}
-        initialData={editingHolding}
+      <AddHoldingModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingHolding(null); }} onSave={saveHolding} initialData={editingHolding} />
+      
+      <UpdatePricesModal 
+        isOpen={isPricesModalOpen} 
+        onClose={() => setIsPricesModalOpen(false)} 
+        holdings={holdings} 
+        onUpdatePrice={updateHoldingPrice} 
       />
 
-      <UpdatePricesModal
-        isOpen={isPricesModalOpen}
-        onClose={() => setIsPricesModalOpen(false)}
+      <HistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => setIsHistoryModalOpen(false)} 
+        history={history} 
+        onAdd={addHistoryPoint} 
+        onDelete={deleteHistoryPoint} 
+      />
+
+      <TransactionsModal 
+        isOpen={isTransactionsModalOpen}
+        onClose={() => setIsTransactionsModalOpen(false)}
         holdings={holdings}
-        onSave={updatePrices}
+      />
+      
+      <PriceHistoryModal
+        isOpen={isPriceHistoryModalOpen}
+        onClose={() => setIsPriceHistoryModalOpen(false)}
+        history={history}
+        holdings={holdings}
       />
     </div>
   );

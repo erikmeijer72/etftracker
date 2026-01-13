@@ -7,17 +7,16 @@ export interface Holding {
   averagePrice: number; // Purchase price per share
   transactionFees: number; // Total fees paid for this holding
   currentPrice: number; // Current market price per share
+  purchaseDate: string; // YYYY-MM-DD
   updatedAt: number;
 }
 
 export interface PortfolioSummary {
   totalInvested: number; // (qty * avgPrice) + fees
-  currentValue: number; // qty * currentPrice OR manual value
-  calculatedValue: number; // Always qty * currentPrice
+  currentValue: number; // qty * currentPrice
   totalFees: number;
   totalResult: number; // currentValue - totalInvested
   percentageResult: number;
-  isManualTotal: boolean;
 }
 
 export interface HistoryEntry {
@@ -25,4 +24,6 @@ export interface HistoryEntry {
   timestamp: number;
   totalValue: number;
   totalInvested: number;
+  breakdown?: { [holdingId: string]: number }; // Maps holding ID to total value
+  prices?: { [holdingId: string]: number }; // Maps holding ID to unit price
 }
