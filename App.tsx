@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, BarChart3, RefreshCw, History as HistoryIcon, Receipt, TrendingUp, Download } from 'lucide-react';
-import { Holding, PortfolioSummary, HistoryEntry } from './types';
+import { Plus, BarChart3, RefreshCw, History as HistoryIcon, Receipt, TrendingUp, Download, Wallet } from 'lucide-react';
+import { Holding, PortfolioSummary, HistoryEntry, Funds } from './types';
 import SummaryCards from './components/SummaryCards';
 import AddHoldingModal from './components/AddHoldingModal';
 import UpdatePricesModal from './components/UpdatePricesModal';
 import HistoryModal from './components/HistoryModal';
 import TransactionsModal from './components/TransactionsModal';
 import PriceHistoryModal from './components/PriceHistoryModal';
+import FundsModal from './components/FundsModal';
 import ETFRow from './components/ETFRow';
 import PortfolioChart from './components/PortfolioChart';
 import * as XLSX from 'xlsx';
@@ -19,6 +20,15 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("Error loading portfolio:", e);
       return [];
+    }
+  });
+
+  const [funds, setFunds] = useState<Funds>(() => {
+    try {
+        const saved = localStorage.getItem('etf_portfolio_funds');
+        return saved ? JSON.parse(saved) : { cash: 0, assets: 0 };
+    } catch (e) {
+        return { cash: 0, assets: 0 };
     }
   });
 
@@ -36,11 +46,16 @@ const App: React.FC = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
   const [isPriceHistoryModalOpen, setIsPriceHistoryModalOpen] = useState(false);
+  const [isFundsModalOpen, setIsFundsModalOpen] = useState(false);
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
 
   useEffect(() => {
     localStorage.setItem('etf_portfolio', JSON.stringify(holdings));
   }, [holdings]);
+
+  useEffect(() => {
+    localStorage.setItem('etf_portfolio_funds', JSON.stringify(funds));
+  }, [funds]);
 
   useEffect(() => {
     localStorage.setItem('etf_portfolio_history', JSON.stringify(history));
@@ -55,17 +70,41 @@ const App: React.FC = () => {
   const calculateBreakdownAndTotal = (currentHoldings: Holding[]) => {
     const breakdown: { [ticker: string]: number } = {};
     const prices: { [ticker: string]: number } = {};
-    let totalValue = 0;
+    let totalEtfValue = 0;
 
     currentHoldings.forEach(h => {
         const val = h.quantity * h.currentPrice;
         const key = h.ticker;
         breakdown[key] = (breakdown[key] || 0) + val;
         prices[key] = h.currentPrice;
-        totalValue += val;
+        totalEtfValue += val;
     });
 
-    return { totalValue, breakdown, prices };
+    return { totalEtfValue, breakdown, prices };
+  };
+
+  const saveFunds = (newFunds: Funds) => {
+    setFunds(newFunds);
+    
+    // Also update today's history entry to reflect new cash balance
+    const today = new Date().toISOString().split('T')[0];
+    const { totalEtfValue, breakdown, prices } = calculateBreakdownAndTotal(holdings);
+    const totalInvested = calculateTotalInvested(holdings);
+    
+    // New Total Value = ETFs + New Cash + New Assets
+    const totalValue = totalEtfValue + newFunds.cash + newFunds.assets;
+
+    setHistory(prev => {
+        const filtered = prev.filter(p => p.date !== today);
+        return [...filtered, {
+            date: today,
+            timestamp: new Date(today).getTime(),
+            totalValue,
+            totalInvested,
+            breakdown,
+            prices
+        }].sort((a, b) => a.timestamp - b.timestamp);
+    });
   };
 
   const saveHolding = (holdingData: Omit<Holding, 'id' | 'updatedAt'> | Holding, purchaseDate: string) => {
@@ -86,16 +125,21 @@ const App: React.FC = () => {
     setHoldings(newHoldings);
     setEditingHolding(null);
 
+    // Update history for "Today" with the new state
     const today = new Date().toISOString().split('T')[0];
-    const { totalValue: currentTotalValue, breakdown: currentBreakdown, prices: currentPrices } = calculateBreakdownAndTotal(newHoldings);
+    const { totalEtfValue, breakdown: currentBreakdown, prices: currentPrices } = calculateBreakdownAndTotal(newHoldings);
     const currentTotalInvested = calculateTotalInvested(newHoldings);
+    
+    // Include current funds in total value
+    const grandTotalValue = totalEtfValue + funds.cash + funds.assets;
 
     setHistory(prev => {
+        // 1. Always update/add entry for TODAY
         const filtered = prev.filter(p => p.date !== today);
         const todayEntry: HistoryEntry = {
             date: today,
             timestamp: new Date(today).getTime(),
-            totalValue: currentTotalValue,
+            totalValue: grandTotalValue,
             totalInvested: currentTotalInvested,
             breakdown: currentBreakdown,
             prices: currentPrices
@@ -103,12 +147,13 @@ const App: React.FC = () => {
         
         let newHistory = [...filtered, todayEntry];
 
+        // 2. If it's a new historical purchase, add the starting point if it doesn't exist
         if (purchaseDate !== today) {
              const exists = newHistory.some(p => p.date === purchaseDate);
              if (!exists) {
                  const breakdownAtPurchase: { [ticker: string]: number } = {};
                  const pricesAtPurchase: { [ticker: string]: number } = {};
-                 let valAtPurchase = 0;
+                 let etfValAtPurchase = 0;
                  
                  const otherHoldings = 'id' in holdingData 
                     ? holdings.filter(h => h.id !== holdingData.id) 
@@ -119,21 +164,29 @@ const App: React.FC = () => {
                     const key = h.ticker;
                     breakdownAtPurchase[key] = (breakdownAtPurchase[key] || 0) + val;
                     pricesAtPurchase[key] = h.currentPrice;
-                    valAtPurchase += val;
+                    etfValAtPurchase += val;
                  });
                  
                  const newItemVal = holdingData.quantity * holdingData.averagePrice;
                  const key = holdingData.ticker;
                  breakdownAtPurchase[key] = (breakdownAtPurchase[key] || 0) + newItemVal;
                  pricesAtPurchase[key] = holdingData.averagePrice;
-                 valAtPurchase += newItemVal;
+                 etfValAtPurchase += newItemVal;
                  
                  const estimatedInvested = calculateTotalInvested(otherHoldings) + newItemVal + holdingData.transactionFees;
 
+                 // NOTE: For historical points, we don't know the cash balance at that time.
+                 // We only include ETF value to avoid skewing history with current cash.
+                 // Or we could add current cash, but that might look like a huge dip/spike.
+                 // Decision: Historical points generated from purchases only track ETF Value + Cash (assuming constant cash?? No).
+                 // Better to just track ETF Value for historical back-fill, but current chart will show Total.
+                 // Actually, let's keep it consistent: Total Value = ETFs + (Current Known Funds). 
+                 // It's an imperfection but better than 0.
+                 
                  newHistory.push({
                      date: purchaseDate,
                      timestamp: new Date(purchaseDate).getTime(),
-                     totalValue: valAtPurchase,
+                     totalValue: etfValAtPurchase + funds.cash + funds.assets,
                      totalInvested: estimatedInvested,
                      breakdown: breakdownAtPurchase,
                      prices: pricesAtPurchase
@@ -151,7 +204,7 @@ const App: React.FC = () => {
     const targetTicker = targetHolding.ticker;
 
     const calculateEntryValues = (pricesMap: {[key:string]: number}, dateStr: string): HistoryEntry => {
-         let totalValue = 0;
+         let etfValue = 0;
          let totalInvested = 0;
          const breakdown: {[key:string]: number} = {};
          
@@ -161,14 +214,15 @@ const App: React.FC = () => {
              
              const val = h.quantity * p;
              breakdown[h.ticker] = (breakdown[h.ticker] || 0) + val;
-             totalValue += val;
+             etfValue += val;
              totalInvested += (h.quantity * h.averagePrice) + h.transactionFees;
          });
 
          return {
              date: dateStr,
              timestamp: new Date(dateStr).getTime(),
-             totalValue,
+             // Always add current funds to total value for consistency
+             totalValue: etfValue + funds.cash + funds.assets,
              totalInvested,
              breakdown,
              prices: pricesMap
@@ -251,7 +305,7 @@ const App: React.FC = () => {
       setHoldings(prev => {
           const newHoldings = prev.filter(h => h.id !== id);
           const today = new Date().toISOString().split('T')[0];
-          const { totalValue, breakdown, prices } = calculateBreakdownAndTotal(newHoldings);
+          const { totalEtfValue, breakdown, prices } = calculateBreakdownAndTotal(newHoldings);
           const newInv = calculateTotalInvested(newHoldings);
           
           setHistory(hist => {
@@ -259,7 +313,7 @@ const App: React.FC = () => {
               return [...filtered, {
                   date: today,
                   timestamp: new Date(today).getTime(),
-                  totalValue,
+                  totalValue: totalEtfValue + funds.cash + funds.assets,
                   totalInvested: newInv,
                   breakdown,
                   prices
@@ -332,20 +386,30 @@ const App: React.FC = () => {
 
   const summary: PortfolioSummary = useMemo(() => {
     const totalInvested = calculateTotalInvested(holdings);
-    const { totalValue } = calculateBreakdownAndTotal(holdings);
+    const { totalEtfValue } = calculateBreakdownAndTotal(holdings);
     const totalFees = holdings.reduce((sum, h) => sum + h.transactionFees, 0);
 
-    const totalResult = totalValue - totalInvested;
+    // Current Value = ETFs + Cash + Assets
+    const currentValue = totalEtfValue + funds.cash + funds.assets;
+
+    // Total Result is pure investment performance (Value of ETFs - Cost of ETFs)
+    // Cash doesn't inherently have a "result" in this context
+    const totalResult = totalEtfValue - totalInvested;
+    
+    // Percentage result is based on invested capital vs etf value
     const percentageResult = totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0;
 
     return {
       totalInvested,
-      currentValue: totalValue,
+      etfValue: totalEtfValue,
+      cash: funds.cash,
+      assets: funds.assets,
+      currentValue,
       totalFees,
       totalResult,
       percentageResult
     };
-  }, [holdings]);
+  }, [holdings, funds]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -400,6 +464,15 @@ const App: React.FC = () => {
             >
                 <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
                 <span className="hidden sm:inline">Koersen</span>
+            </button>
+
+            <button 
+                onClick={() => setIsFundsModalOpen(true)}
+                className="flex-1 sm:flex-none bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
+                title="Geld & Tegoeden beheren"
+            >
+                <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
+                <span className="hidden sm:inline">Geld</span>
             </button>
 
             <button 
@@ -459,6 +532,13 @@ const App: React.FC = () => {
         onClose={() => setIsPricesModalOpen(false)} 
         holdings={holdings} 
         onUpdatePrice={updateHoldingPrice} 
+      />
+
+      <FundsModal
+        isOpen={isFundsModalOpen}
+        onClose={() => setIsFundsModalOpen(false)}
+        funds={funds}
+        onSave={saveFunds}
       />
 
       <HistoryModal 

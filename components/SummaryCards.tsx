@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PortfolioSummary, Holding } from '../types';
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, X, Calculator } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, X, Calculator, Banknote, Coins } from 'lucide-react';
 
 interface Props {
   summary: PortfolioSummary;
@@ -43,13 +43,16 @@ const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
             <div className="flex items-center gap-2">
                 <p className={valueClass}>{formatEuroPrecise(summary.currentValue)}</p>
             </div>
+            {(summary.cash > 0 || summary.assets > 0) && (
+                 <p className="text-[10px] text-slate-400 mt-0.5">Incl. cash & tegoeden</p>
+            )}
           </div>
         </div>
 
         {/* Invested */}
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-1 sm:mb-2">
-            <h3 className={labelClass}>Inleg</h3>
+            <h3 className={labelClass}>Inleg (ETFs)</h3>
             <div className={`${iconBgClass} bg-indigo-50`}>
               <PiggyBank className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-500" />
             </div>
@@ -112,26 +115,63 @@ const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {holdings.length === 0 ? (
-                        <p className="text-center text-slate-400 text-sm py-4">Geen posities om te tonen.</p>
-                    ) : (
-                        holdings.map(h => {
-                            const val = h.quantity * h.currentPrice;
-                            return (
-                                <div key={h.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <div className="min-w-0 flex-1 pr-2">
-                                        <div className="font-bold text-slate-900 truncate text-sm">{h.ticker}</div>
-                                        <div className="text-xs text-slate-500">
-                                            {h.quantity} stuks × {formatEuro(h.currentPrice)}
+                    {/* FUNDS SECTION */}
+                    {(summary.cash > 0 || summary.assets > 0) && (
+                        <div className="space-y-3 mb-4 border-b border-slate-100 pb-4">
+                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Geld & Tegoeden</h4>
+                             {summary.cash > 0 && (
+                                <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white p-1.5 rounded-full text-emerald-600">
+                                            <Banknote className="w-4 h-4" />
                                         </div>
+                                        <div className="font-bold text-slate-900 text-sm">Vrije Ruimte</div>
                                     </div>
-                                    <div className="text-right font-bold text-slate-900 text-sm whitespace-nowrap">
-                                        {formatEuroPrecise(val)}
+                                    <div className="text-right font-bold text-emerald-700 text-sm whitespace-nowrap">
+                                        {formatEuroPrecise(summary.cash)}
                                     </div>
                                 </div>
-                            );
-                        })
+                             )}
+                             {summary.assets > 0 && (
+                                <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white p-1.5 rounded-full text-amber-600">
+                                            <Coins className="w-4 h-4" />
+                                        </div>
+                                        <div className="font-bold text-slate-900 text-sm">Overige Tegoeden</div>
+                                    </div>
+                                    <div className="text-right font-bold text-amber-700 text-sm whitespace-nowrap">
+                                        {formatEuroPrecise(summary.assets)}
+                                    </div>
+                                </div>
+                             )}
+                        </div>
                     )}
+
+                    {/* ETF SECTION */}
+                    <div className="space-y-3">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">ETF Portefeuille</h4>
+                        {holdings.length === 0 ? (
+                            <p className="text-center text-slate-400 text-sm py-2">Geen posities.</p>
+                        ) : (
+                            holdings.map(h => {
+                                const val = h.quantity * h.currentPrice;
+                                return (
+                                    <div key={h.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div className="min-w-0 flex-1 pr-2">
+                                            <div className="font-bold text-slate-900 truncate text-sm">{h.ticker}</div>
+                                            <div className="text-xs text-slate-500">
+                                                {h.quantity} stuks × {formatEuro(h.currentPrice)}
+                                            </div>
+                                        </div>
+                                        <div className="text-right font-bold text-slate-900 text-sm whitespace-nowrap">
+                                            {formatEuroPrecise(val)}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
                 </div>
 
                 <div className="p-4 bg-slate-50 border-t border-slate-200 rounded-b-2xl flex justify-between items-center">

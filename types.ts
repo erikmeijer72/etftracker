@@ -11,11 +11,19 @@ export interface Holding {
   updatedAt: number;
 }
 
+export interface Funds {
+  cash: number;
+  assets: number;
+}
+
 export interface PortfolioSummary {
   totalInvested: number; // (qty * avgPrice) + fees
-  currentValue: number; // qty * currentPrice
+  etfValue: number; // qty * currentPrice (Pure ETF value)
+  cash: number;
+  assets: number;
+  currentValue: number; // etfValue + cash + assets (Grand Total)
   totalFees: number;
-  totalResult: number; // currentValue - totalInvested
+  totalResult: number; // etfValue - totalInvested
   percentageResult: number;
 }
 
