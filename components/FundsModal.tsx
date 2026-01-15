@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Wallet } from 'lucide-react';
+import { X, Save, Wallet, Banknote, Clock } from 'lucide-react';
 import { Funds } from '../types';
 
 interface Props {
@@ -40,7 +40,7 @@ const FundsModal: React.FC<Props> = ({ isOpen, onClose, funds, onSave }) => {
                 <Wallet className="w-5 h-5 text-emerald-600" />
             </div>
             <h2 className="text-xl font-semibold text-slate-900">
-                Geld & Tegoeden
+                Geld & Claims
             </h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-800 transition">
@@ -51,7 +51,9 @@ const FundsModal: React.FC<Props> = ({ isOpen, onClose, funds, onSave }) => {
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-600">Vrije Ruimte (Cash)</label>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-slate-500" /> Vrij Cash Geld
+            </label>
             <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
                 <input 
@@ -64,11 +66,13 @@ const FundsModal: React.FC<Props> = ({ isOpen, onClose, funds, onSave }) => {
                 autoFocus
                 />
             </div>
-            <p className="text-xs text-slate-400">Geld beschikbaar op je rekening maar nog niet belegd.</p>
+            <p className="text-xs text-slate-500">Geld dat je bezit maar (nog) niet in ETF's hebt belegd.</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-600">Overige Tegoeden</label>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-500" /> Nog te ontvangen
+            </label>
             <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
                 <input 
@@ -80,7 +84,7 @@ const FundsModal: React.FC<Props> = ({ isOpen, onClose, funds, onSave }) => {
                 placeholder="0.00"
                 />
             </div>
-            <p className="text-xs text-slate-400">Bv. dividenden, rente of andere assets.</p>
+            <p className="text-xs text-slate-500">Compensaties of vergoedingen die nog niet zijn uitbetaald.</p>
           </div>
 
           <button 

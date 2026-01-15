@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
-import { X, Receipt } from 'lucide-react';
+import { X, Receipt, Edit2 } from 'lucide-react';
 import { Holding } from '../types';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   holdings: Holding[];
+  onEdit: (holding: Holding) => void;
 }
 
-const TransactionsModal: React.FC<Props> = ({ isOpen, onClose, holdings }) => {
+const TransactionsModal: React.FC<Props> = ({ isOpen, onClose, holdings, onEdit }) => {
   if (!isOpen) return null;
 
   // Sort holdings by purchase date (newest first)
@@ -37,7 +38,7 @@ const TransactionsModal: React.FC<Props> = ({ isOpen, onClose, holdings }) => {
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-4xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-5xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
         
         {/* Header */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
@@ -65,12 +66,13 @@ const TransactionsModal: React.FC<Props> = ({ isOpen, onClose, holdings }) => {
                 <th className="py-2 px-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 text-right">Prijs</th>
                 <th className="py-2 px-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 text-right">Kosten</th>
                 <th className="py-2 px-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 text-right">Totaal</th>
+                <th className="py-2 px-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 text-right">Actie</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {sortedHoldings.length === 0 ? (
                 <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400 text-sm">
+                    <td colSpan={7} className="py-8 text-center text-slate-400 text-sm">
                         Nog geen transacties gevonden.
                     </td>
                 </tr>
@@ -96,6 +98,15 @@ const TransactionsModal: React.FC<Props> = ({ isOpen, onClose, holdings }) => {
                             </td>
                             <td className="py-2 px-3 text-xs sm:text-sm text-slate-900 font-bold text-right tabular-nums">
                                 {formatNumber(lineTotal)}
+                            </td>
+                            <td className="py-2 px-3 text-xs sm:text-sm text-right">
+                                <button 
+                                    onClick={() => onEdit(h)}
+                                    className="p-1.5 text-slate-400 hover:text-[#0099CC] hover:bg-blue-50 rounded-lg transition"
+                                    title="Bewerk transactie"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
                             </td>
                         </tr>
                     );

@@ -175,14 +175,6 @@ const App: React.FC = () => {
                  
                  const estimatedInvested = calculateTotalInvested(otherHoldings) + newItemVal + holdingData.transactionFees;
 
-                 // NOTE: For historical points, we don't know the cash balance at that time.
-                 // We only include ETF value to avoid skewing history with current cash.
-                 // Or we could add current cash, but that might look like a huge dip/spike.
-                 // Decision: Historical points generated from purchases only track ETF Value + Cash (assuming constant cash?? No).
-                 // Better to just track ETF Value for historical back-fill, but current chart will show Total.
-                 // Actually, let's keep it consistent: Total Value = ETFs + (Current Known Funds). 
-                 // It's an imperfection but better than 0.
-                 
                  newHistory.push({
                      date: purchaseDate,
                      timestamp: new Date(purchaseDate).getTime(),
@@ -221,7 +213,6 @@ const App: React.FC = () => {
          return {
              date: dateStr,
              timestamp: new Date(dateStr).getTime(),
-             // Always add current funds to total value for consistency
              totalValue: etfValue + funds.cash + funds.assets,
              totalInvested,
              breakdown,
@@ -389,14 +380,8 @@ const App: React.FC = () => {
     const { totalEtfValue } = calculateBreakdownAndTotal(holdings);
     const totalFees = holdings.reduce((sum, h) => sum + h.transactionFees, 0);
 
-    // Current Value = ETFs + Cash + Assets
     const currentValue = totalEtfValue + funds.cash + funds.assets;
-
-    // Total Result is pure investment performance (Value of ETFs - Cost of ETFs)
-    // Cash doesn't inherently have a "result" in this context
     const totalResult = totalEtfValue - totalInvested;
-    
-    // Percentage result is based on invested capital vs etf value
     const percentageResult = totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0;
 
     return {
@@ -416,19 +401,14 @@ const App: React.FC = () => {
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-3 items-center h-14 sm:h-16">
-            {/* Logo on the far left */}
             <div className="flex justify-start">
               <div className="bg-[#0099CC] p-1.5 sm:p-2 rounded-lg shrink-0">
                 <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
             </div>
-
-            {/* Title centered in the middle */}
             <div className="flex justify-center">
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap">ETF Portfolio</h1>
             </div>
-
-            {/* Download Button on the far right */}
             <div className="flex justify-end">
               <button 
                 onClick={handleExport}
@@ -469,10 +449,10 @@ const App: React.FC = () => {
             <button 
                 onClick={() => setIsFundsModalOpen(true)}
                 className="flex-1 sm:flex-none bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300 shadow-sm text-sm"
-                title="Geld & Tegoeden beheren"
+                title="Geld & Claims beheren"
             >
                 <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
-                <span className="hidden sm:inline">Geld</span>
+                <span className="inline">Kas & Claims</span>
             </button>
 
             <button 
@@ -553,6 +533,11 @@ const App: React.FC = () => {
         isOpen={isTransactionsModalOpen}
         onClose={() => setIsTransactionsModalOpen(false)}
         holdings={holdings}
+        onEdit={(h) => {
+            setIsTransactionsModalOpen(false);
+            setEditingHolding(h);
+            setIsModalOpen(true);
+        }}
       />
       
       <PriceHistoryModal

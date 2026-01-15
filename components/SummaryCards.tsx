@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PortfolioSummary, Holding } from '../types';
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, X, Calculator, Banknote, Coins } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, X, Calculator, Banknote, Coins, Clock } from 'lucide-react';
 
 interface Props {
   summary: PortfolioSummary;
@@ -44,7 +44,7 @@ const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
                 <p className={valueClass}>{formatEuroPrecise(summary.currentValue)}</p>
             </div>
             {(summary.cash > 0 || summary.assets > 0) && (
-                 <p className="text-[10px] text-slate-400 mt-0.5">Incl. cash & tegoeden</p>
+                 <p className="text-[10px] text-slate-400 mt-0.5">Incl. cash & claims</p>
             )}
           </div>
         </div>
@@ -118,14 +118,14 @@ const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
                     {/* FUNDS SECTION */}
                     {(summary.cash > 0 || summary.assets > 0) && (
                         <div className="space-y-3 mb-4 border-b border-slate-100 pb-4">
-                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Geld & Tegoeden</h4>
+                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Geld & Claims</h4>
                              {summary.cash > 0 && (
                                 <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                                     <div className="flex items-center gap-3">
                                         <div className="bg-white p-1.5 rounded-full text-emerald-600">
                                             <Banknote className="w-4 h-4" />
                                         </div>
-                                        <div className="font-bold text-slate-900 text-sm">Vrije Ruimte</div>
+                                        <div className="font-bold text-slate-900 text-sm">Vrij Cash Geld</div>
                                     </div>
                                     <div className="text-right font-bold text-emerald-700 text-sm whitespace-nowrap">
                                         {formatEuroPrecise(summary.cash)}
@@ -136,9 +136,9 @@ const SummaryCards: React.FC<Props> = ({ summary, holdings }) => {
                                 <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
                                     <div className="flex items-center gap-3">
                                         <div className="bg-white p-1.5 rounded-full text-amber-600">
-                                            <Coins className="w-4 h-4" />
+                                            <Clock className="w-4 h-4" />
                                         </div>
-                                        <div className="font-bold text-slate-900 text-sm">Overige Tegoeden</div>
+                                        <div className="font-bold text-slate-900 text-sm">Nog te ontvangen</div>
                                     </div>
                                     <div className="text-right font-bold text-amber-700 text-sm whitespace-nowrap">
                                         {formatEuroPrecise(summary.assets)}
